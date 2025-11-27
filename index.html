@@ -1,44 +1,95 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
 <title>Painel Destroyer</title>
 <style>
-body { font-family: Arial; background:#111; color:#fff; display:flex; justify-content:center; align-items:center; height:100vh; }
-.container { background:#222; padding:20px; border-radius:10px; width:300px; }
-input, button { width:100%; padding:10px; margin:5px 0; border-radius:5px; border:none; }
-button { background:#0a6; color:#fff; cursor:pointer; }
-button:hover { background:#0c8; }
-.message { margin-top:10px; }
+body {font-family: Arial; background:#111; color:#fff; padding:20px;}
+button {padding:8px 12px; margin:5px; cursor:pointer;}
+input, select {padding:5px; margin:5px;}
+.container {display:flex; flex-direction:column; max-width:600px;}
+h2 {color:#0af;}
+.success {color:#0f0;}
+.error {color:#f00;}
 </style>
 </head>
 <body>
 <div class="container">
-<h2>Login</h2>
-<input type="text" id="user" placeholder="Usuário">
-<input type="text" id="key" placeholder="Key">
-<button onclick="login()">Entrar</button>
-<div class="message" id="message"></div>
+<h2>Painel Admin Destroyer</h2>
+
+<label>Username:</label>
+<input type="text" id="username" placeholder="Usuário">
+<label>Expiração (dias):</label>
+<select id="days">
+<option value="1">1</option>
+<option value="3">3</option>
+<option value="7">7</option>
+<option value="10">10</option>
+<option value="20">20</option>
+<option value="30">30</option>
+</select>
+
+<div>
+<button onclick="generateKey()">Gerar Key</button>
+<button onclick="deleteKey()">Deletar Key</button>
+<button onclick="resetHWID()">Reset HWID</button>
+<button onclick="banUser()">Banir Usuário</button>
+<button onclick="viewStats()">Estatísticas</button>
+<button onclick="viewLogs()">Logs</button>
+</div>
+
+<div id="output"></div>
 </div>
 
 <script>
-const API_URL = "https://twokdestroyerclient.onrender.com"; // Troque pelo domínio do seu backend
+const output = document.getElementById('output');
 
-async function login() {
-    const user = document.getElementById('user').value;
-    const key = document.getElementById('key').value;
-    const res = await fetch(API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type':'application/json' },
-        body: JSON.stringify({ user, key })
+function show(msg, success=true){ output.innerHTML = `<p class="${success?'success':'error'}">${msg}</p>`; }
+
+async function generateKey(){
+    const username = document.getElementById('username').value;
+    const days = document.getElementById('days').value;
+    const res = await fetch('/admin/generate-key', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({username, days})
     });
     const data = await res.json();
-    document.getElementById('message').innerText = data.message;
-    if(data.success){
-        alert("Bem-vindo ao painel!");
-        // Aqui você pode redirecionar para o painel admin
-    }
+    if(data.success) show(`Key gerada: ${data.user.key}`);
+    else show('Erro ao gerar key', false);
+}
+
+async function deleteKey(){
+    const username = document.getElementById('username').value;
+    const res = await fetch('/admin/delete-key',{method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({username})});
+    const data = await res.json();
+    show(data.message, data.success);
+}
+
+async function resetHWID(){
+    const username = document.getElementById('username').value;
+    const res = await fetch('/admin/reset-hwid',{method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({username})});
+    const data = await res.json();
+    show(data.message, data.success);
+}
+
+async function banUser(){
+    const username = document.getElementById('username').value;
+    const res = await fetch('/admin/ban',{method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({username})});
+    const data = await res.json();
+    show(data.message, data.success);
+}
+
+async function viewStats(){
+    const res = await fetch('/admin/stats');
+    const data = await res.json();
+    show(`Total usuários: ${data.count}<br>${JSON.stringify(data.users,null,2)}`);
+}
+
+async function viewLogs(){
+    const res = await fetch('/admin/logs');
+    const data = await res.json();
+    show(JSON.stringify(data,null,2));
 }
 </script>
 </body>
-    </html>
+</html>
