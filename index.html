@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Destroyer Panel</title>
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        background: #0a0f1c;
+        color: #fff;
+        margin: 0;
+        padding: 0;
+    }
+    .container {
+        width: 95%;
+        max-width: 1200px;
+        margin: 20px auto;
+    }
+    h1 { text-align: center; color: #0ff; }
+    .card {
+        background: #1b1f33;
+        padding: 15px;
+        margin-bottom: 20px;
+        border-radius: 8px;
+        box-shadow: 0 0 10px #000;
+    }
+    input, select, button {
+        padding: 8px;
+        margin: 5px 0;
+        border-radius: 5px;
+        border: none;
+        font-size: 14px;
+    }
+    button {
+        background-color: #0ff;
+        color: #000;
+        cursor: pointer;
+    }
+    button:hover { background-color: #0cc; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 10px; border: 1px solid #555; text-align: left; }
+    th { background-color: #0ff; color: #000; }
+    #login-card { max-width: 400px; margin: 50px auto; }
+</style>
+</head>
+<body>
+
+<div class="container" id="login-card">
+    <h1>Admin Login</h1>
+    <div class="card">
+        <input type="text" id="username" placeholder="Usuário"><br>
+        <input type="password" id="password" placeholder="Senha"><br>
+        <button onclick="login()">Entrar</button>
+        <p id="login-msg" style="color:red;"></p>
+    </div>
+</div>
+
+<div class="container" id="panel" style="display:none;">
+    <h1>Destroyer Panel</h1>
+
+    <div class="card">
+        <h2>Gerar Key</h2>
+        <label>Expiração (dias):</label>
+        <select id="expiration">
+            <option value="1">1</option>
+            <option value="3">3</option>
+            <option value="7">7</option>
+            <option value="10">10</option>
+            <option value="20">20</option>
+            <option value="30">30</option>
+        </select>
+        <button onclick="generateKey()">Gerar</button>
+        <p id="new-key"></p>
+    </div>
+
+    <div class="card">
+        <h2>Gerenciar Keys</h2>
+        <table id="keys-table">
+            <thead>
+                <tr>
+                    <th>Key</th>
+                    <th>HWID</th>
+                    <th>Expira</th>
+                    <th>Ban</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+        <button onclick="loadKeys()">Atualizar Lista</button>
+    </div>
+
+    <div class="card">
+        <h2>Estatísticas</h2>
+        <p id="stats"></p>
+        <button onclick="loadStats()">Atualizar Estatísticas</button>
+    </div>
+
+    <div class="card">
+        <h2>Logs</h2>
+        <table id="logs-table">
+            <thead>
+                <tr>
+                    <th>Timestamp</th>
+                    <th>Admin</th>
+                    <th>Ação</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+const API_URL = 'http://localhost:3000'; // altere para seu domínio InfinityFree
+
+let currentAdmin = '';
+
+function login() {
+    const username = document.getElementById('username').value;
+    const password = document.getElementById('password').value;
+
+    fetch(API_URL + '/login', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({username, password})
+    })
+    .then(res => res.json())
+    .then(data => {
+        if(data.success){
+            currentAdmin = username;
+            document.getElementById('login-card').style.display = 'none';
+            document.getElementById('panel').style.display = 'block';
+            loadKeys();
+            loadStats();
+        } else {
+            document.getElementById('login-msg').innerText = data.message;
+        }
+    });
+}
+
+function generateKey() {
+    const expiration = parseInt(document.getElementById('expiration').value);
+    fetch(API_URL + '/generate-key', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({expirationDays: expiration})
+    })
+    .then(res => res.json())
+    .then(data => {
+        document.getElementById('new-key').innerText = 'Nova Key: ' + data.key.key;
+        logAction(`Gerou Key ${data.key.key}`);
+        loadKeys();
+    });
+}
+
+function deleteKey(key) {
+    fetch(API_URL + '/delete-key', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({key})
+    })
+    .then(() => {
+        logAction(`Excluiu Key ${key}`);
+        loadKeys();
+    });
+}
+
+function resetHWID(key) {
+    fetch(API_URL + '/reset-hwid', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({key})
+    })
+    .then(() => {
+        logAction(`Resetou HWID da Key ${key}`);
+        loadKeys();
+    });
+}
+
+function toggleBan(key, ban) {
+    fetch(API_URL + '/ban-key', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({key, ban})
+    })
+    .then(() => {
+        logAction(`${ban ? 'Baniu' : 'Desbaniu'} Key ${key}`);
+        loadKeys();
+    });
+}
+
+function loadKeys() {
+    fetch(API_URL + '/keys')
+    .then(res => res.json())
+    .then(keys => {
+        const tbody = document.querySelector('#keys-table tbody');
+        tbody.innerHTML = '';
+        keys.forEach(k => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${k.key}</td>
+                <td>${k.hwid || 'Nenhum'}</td>
+                <td>${new Date(k.expiresAt).toLocaleString()}</td>
+                <td>${k.banned ? 'Sim' : 'Não'}</td>
+                <td>
+                    <button onclick="resetHWID('${k.key}')">Reset HWID</button>
+                    <button onclick="deleteKey('${k.key}')">Excluir</button>
+                    <button onclick="toggleBan('${k.key}', ${!k.banned})">${k.banned ? 'Desban' : 'Ban'}</button>
+                </td>
+            `;
+            tbody.appendChild(row);
+        });
+    });
+}
+
+function loadStats() {
+    fetch(API_URL + '/stats')
+    .then(res => res.json())
+    .then(data => {
+        document.getElementById('stats').innerText = `Total Keys: ${data.totalKeys} | Keys Banidas: ${data.bannedKeys}`;
+    });
+}
+
+function logAction(action) {
+    fetch(API_URL + '/log', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({action, admin: currentAdmin})
+    })
+    .then(() => loadLogs());
+}
+
+function loadLogs() {
+    fetch(API_URL + '/logs.json')
+    .then(res => res.json())
+    .then(logs => {
+        const tbody = document.querySelector('#logs-table tbody');
+        tbody.innerHTML = '';
+        logs.forEach(l => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${new Date(l.timestamp).toLocaleString()}</td>
+                <td>${l.admin}</td>
+                <td>${l.action}</td>
+            `;
+            tbody.appendChild(row);
+        });
+    });
+}
+
+loadLogs();
+</script>
+</body>
+</html>
